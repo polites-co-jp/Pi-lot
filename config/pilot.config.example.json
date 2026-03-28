@@ -1,0 +1,27 @@
+{
+  "admin": {
+    "username": "admin",
+    "password": "changeme"
+  },
+  "jwt": {
+    "secret": "CHANGE_THIS_TO_RANDOM_STRING",
+    "expires_in": "24h"
+  },
+  "discord": {
+    "webhook_url": ""
+  },
+  "smb_mounts": [
+    {
+      "unc_path": "\\\\192.168.1.111\\share",
+      "local_path": "/mnt/smb/source"
+    },
+    {
+      "unc_path": "\\\\192.168.1.222\\bk",
+      "local_path": "/mnt/smb/dest"
+    }
+  ],
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0"
+  }
+}

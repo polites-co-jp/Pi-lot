@@ -1,1 +1,8 @@
 memory/
+node_modules/
+dist/
+data/
+*.db
+*.db-journal
+config/pilot.config.json
+.env
