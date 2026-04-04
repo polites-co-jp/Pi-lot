@@ -6,7 +6,7 @@ import type { BackupJob } from '../db/jobs.js';
 import { createExecution, updateExecutionSuccess, updateExecutionFailed, getLastSuccessfulExecution } from '../db/executions.js';
 import { sendDiscordNotification, formatStartNotification, formatSuccessNotification, formatErrorNotification } from '../notify/discord.js';
 
-function formatDateTime(date: Date): string {
+export function formatDateTime(date: Date): string {
   const y = date.getUTCFullYear();
   const mo = String(date.getUTCMonth() + 1).padStart(2, '0');
   const d = String(date.getUTCDate()).padStart(2, '0');
@@ -16,7 +16,7 @@ function formatDateTime(date: Date): string {
   return `${y}${mo}${d}-${h}${mi}${s}`;
 }
 
-function formatReadableDateTime(date: Date): string {
+export function formatReadableDateTime(date: Date): string {
   const y = date.getUTCFullYear();
   const mo = String(date.getUTCMonth() + 1).padStart(2, '0');
   const d = String(date.getUTCDate()).padStart(2, '0');
@@ -26,7 +26,7 @@ function formatReadableDateTime(date: Date): string {
   return `${y}/${mo}/${d} ${h}:${mi}:${s}`;
 }
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));

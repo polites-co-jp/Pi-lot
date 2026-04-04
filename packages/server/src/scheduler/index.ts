@@ -31,7 +31,12 @@ export function scheduleJob(jobId: number, schedule: string, jobName: string): v
     if (!job || !job.enabled) return;
 
     console.log(`スケジュール実行開始: ${job.name}`);
-    await executeBackupJob(job);
+    if (job.job_type === 'dispatch') {
+      const { executeDispatchJob } = await import('../batch/dispatch.js');
+      await executeDispatchJob(job);
+    } else {
+      await executeBackupJob(job);
+    }
   });
 
   scheduledTasks.set(jobId, task);

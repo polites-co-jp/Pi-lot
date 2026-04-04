@@ -40,6 +40,27 @@ const migrations = [
       `);
     },
   },
+  {
+    version: 2,
+    description: 'Add dispatch job support (job_type, file_action, dispatch_rules)',
+    up(db: Database.Database) {
+      db.exec(`
+        ALTER TABLE backup_jobs ADD COLUMN job_type TEXT NOT NULL DEFAULT 'backup';
+        ALTER TABLE backup_jobs ADD COLUMN default_dest_path TEXT;
+        ALTER TABLE backup_jobs ADD COLUMN file_action TEXT NOT NULL DEFAULT 'copy';
+
+        CREATE TABLE dispatch_rules (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          job_id    INTEGER NOT NULL REFERENCES backup_jobs(id) ON DELETE CASCADE,
+          priority  INTEGER NOT NULL DEFAULT 0,
+          pattern   TEXT    NOT NULL,
+          dest_path TEXT    NOT NULL,
+          UNIQUE(job_id, priority)
+        );
+        CREATE INDEX idx_dispatch_rules_job ON dispatch_rules(job_id);
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

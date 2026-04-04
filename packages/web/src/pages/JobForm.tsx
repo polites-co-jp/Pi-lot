@@ -1,12 +1,17 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { api } from '../api/client';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import cronstrue from 'cronstrue/i18n';
+
+interface DispatchRuleForm {
+  pattern: string;
+  dest_path: string;
+}
 
 interface JobFormData {
   name: string;
@@ -17,6 +22,10 @@ interface JobFormData {
   filter_mode: 'full' | 'incremental';
   retention: number;
   notify: { on_start: boolean; on_error: boolean; on_success: boolean };
+  job_type: 'backup' | 'dispatch';
+  default_dest_path: string;
+  file_action: 'move' | 'copy';
+  dispatch_rules: DispatchRuleForm[];
 }
 
 const defaultData: JobFormData = {
@@ -28,6 +37,10 @@ const defaultData: JobFormData = {
   filter_mode: 'full',
   retention: 0,
   notify: { on_start: false, on_error: true, on_success: false },
+  job_type: 'backup',
+  default_dest_path: '',
+  file_action: 'copy',
+  dispatch_rules: [],
 };
 
 function cronPreview(expr: string): string {
@@ -36,6 +49,10 @@ function cronPreview(expr: string): string {
   } catch {
     return '無効なcron式';
   }
+}
+
+function isValidRegex(pattern: string): boolean {
+  try { new RegExp(pattern); return true; } catch { return false; }
 }
 
 export function JobForm() {
@@ -58,19 +75,86 @@ export function JobForm() {
         filter_mode: job.filter_mode,
         retention: job.retention,
         notify: job.notify,
+        job_type: job.job_type ?? 'backup',
+        default_dest_path: job.default_dest_path ?? '',
+        file_action: job.file_action ?? 'copy',
+        dispatch_rules: (job.dispatch_rules ?? []).map((r: any) => ({
+          pattern: r.pattern,
+          dest_path: r.dest_path,
+        })),
       });
     });
   }, [id, isEdit]);
 
+  const addRule = () => {
+    setForm({ ...form, dispatch_rules: [...form.dispatch_rules, { pattern: '', dest_path: '' }] });
+  };
+
+  const removeRule = (index: number) => {
+    setForm({ ...form, dispatch_rules: form.dispatch_rules.filter((_, i) => i !== index) });
+  };
+
+  const updateRule = (index: number, field: keyof DispatchRuleForm, value: string) => {
+    const rules = [...form.dispatch_rules];
+    rules[index] = { ...rules[index], [field]: value };
+    setForm({ ...form, dispatch_rules: rules });
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (form.job_type === 'dispatch') {
+      if (form.dispatch_rules.length === 0 && !form.default_dest_path) {
+        setError('振り分けルールを1つ以上追加するか、デフォルト移動先を設定してください');
+        return;
+      }
+      for (let i = 0; i < form.dispatch_rules.length; i++) {
+        const rule = form.dispatch_rules[i];
+        if (!rule.pattern) {
+          setError(`ルール${i + 1}: 正規表現パターンを入力してください`);
+          return;
+        }
+        if (!isValidRegex(rule.pattern)) {
+          setError(`ルール${i + 1}: 無効な正規表現です — ${rule.pattern}`);
+          return;
+        }
+        if (!rule.dest_path) {
+          setError(`ルール${i + 1}: 移動先を入力してください`);
+          return;
+        }
+      }
+    }
+
     setLoading(true);
     try {
-      if (isEdit) {
-        await api.put(`/jobs/${id}`, form);
+      const payload: any = {
+        name: form.name,
+        source_path: form.source_path,
+        schedule: form.schedule,
+        enabled: form.enabled,
+        notify: form.notify,
+        job_type: form.job_type,
+      };
+
+      if (form.job_type === 'backup') {
+        payload.dest_path = form.dest_path;
+        payload.filter_mode = form.filter_mode;
+        payload.retention = form.retention;
       } else {
-        await api.post('/jobs', form);
+        payload.default_dest_path = form.default_dest_path || '';
+        payload.file_action = form.file_action;
+        payload.dispatch_rules = form.dispatch_rules.map((r, i) => ({
+          priority: (i + 1) * 10,
+          pattern: r.pattern,
+          dest_path: r.dest_path,
+        }));
+      }
+
+      if (isEdit) {
+        await api.put(`/jobs/${id}`, payload);
+      } else {
+        await api.post('/jobs', payload);
       }
       navigate('/');
     } catch (err) {
@@ -107,19 +191,49 @@ export function JobForm() {
             )}
 
             <div className="space-y-2">
+              <Label>ジョブ種別</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="job_type"
+                    value="backup"
+                    checked={form.job_type === 'backup'}
+                    onChange={() => setForm({ ...form, job_type: 'backup' })}
+                  />
+                  バックアップ
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="job_type"
+                    value="dispatch"
+                    checked={form.job_type === 'dispatch'}
+                    onChange={() => setForm({ ...form, job_type: 'dispatch' })}
+                  />
+                  ファイル振り分け
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="name">ジョブ名</Label>
               <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="source">コピー元 (UNCパス)</Label>
+              <Label htmlFor="source">
+                {form.job_type === 'backup' ? 'コピー元 (UNCパス)' : '監視フォルダ (UNCパス)'}
+              </Label>
               <Input id="source" value={form.source_path} onChange={(e) => setForm({ ...form, source_path: e.target.value })} placeholder="\\192.168.1.111\share\data" required />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="dest">コピー先 (UNCパス)</Label>
-              <Input id="dest" value={form.dest_path} onChange={(e) => setForm({ ...form, dest_path: e.target.value })} placeholder="\\192.168.1.222\bk" required />
-            </div>
+            {form.job_type === 'backup' && (
+              <div className="space-y-2">
+                <Label htmlFor="dest">コピー先 (UNCパス)</Label>
+                <Input id="dest" value={form.dest_path} onChange={(e) => setForm({ ...form, dest_path: e.target.value })} placeholder="\\192.168.1.222\bk" required />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="schedule">スケジュール (cron式)</Label>
@@ -128,26 +242,103 @@ export function JobForm() {
             </div>
 
             <hr />
-            <h3 className="text-sm font-semibold text-gray-600">オプション</h3>
 
-            <div className="space-y-2">
-              <Label>コピー方式</Label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="radio" name="filter_mode" value="full" checked={form.filter_mode === 'full'} onChange={() => setForm({ ...form, filter_mode: 'full' })} />
-                  全ファイルコピー
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="radio" name="filter_mode" value="incremental" checked={form.filter_mode === 'incremental'} onChange={() => setForm({ ...form, filter_mode: 'incremental' })} />
-                  差分コピー
-                </label>
-              </div>
-            </div>
+            {form.job_type === 'backup' ? (
+              <>
+                <h3 className="text-sm font-semibold text-gray-600">バックアップオプション</h3>
 
-            <div className="space-y-2">
-              <Label htmlFor="retention">保持世代数 (0=無制限)</Label>
-              <Input id="retention" type="number" min={0} value={form.retention} onChange={(e) => setForm({ ...form, retention: parseInt(e.target.value) || 0 })} />
-            </div>
+                <div className="space-y-2">
+                  <Label>コピー方式</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="radio" name="filter_mode" value="full" checked={form.filter_mode === 'full'} onChange={() => setForm({ ...form, filter_mode: 'full' })} />
+                      全ファイルコピー
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="radio" name="filter_mode" value="incremental" checked={form.filter_mode === 'incremental'} onChange={() => setForm({ ...form, filter_mode: 'incremental' })} />
+                      差分コピー
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="retention">保持世代数 (0=無制限)</Label>
+                  <Input id="retention" type="number" min={0} value={form.retention} onChange={(e) => setForm({ ...form, retention: parseInt(e.target.value) || 0 })} />
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-semibold text-gray-600">振り分け設定</h3>
+
+                <div className="space-y-2">
+                  <Label>ファイル操作</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="radio" name="file_action" value="copy" checked={form.file_action === 'copy'} onChange={() => setForm({ ...form, file_action: 'copy' })} />
+                      コピー
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="radio" name="file_action" value="move" checked={form.file_action === 'move'} onChange={() => setForm({ ...form, file_action: 'move' })} />
+                      移動
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="default_dest">条件に一致しないファイルの移動先 (任意)</Label>
+                  <Input
+                    id="default_dest"
+                    value={form.default_dest_path}
+                    onChange={(e) => setForm({ ...form, default_dest_path: e.target.value })}
+                    placeholder="空欄の場合、一致しないファイルは移動しません"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>振り分けルール (上から順に評価)</Label>
+                    <Button type="button" variant="outline" size="sm" onClick={addRule}>
+                      <Plus className="mr-1 h-3 w-3" /> ルール追加
+                    </Button>
+                  </div>
+
+                  {form.dispatch_rules.length === 0 && (
+                    <p className="text-sm text-gray-400">ルールがありません。「ルール追加」で条件を設定してください。</p>
+                  )}
+
+                  {form.dispatch_rules.map((rule, index) => (
+                    <div key={index} className="rounded-md border border-gray-200 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gray-500">ルール {index + 1}</span>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeRule(index)}>
+                          <Trash2 className="h-3 w-3 text-red-500" />
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">ファイル名の正規表現</Label>
+                        <Input
+                          value={rule.pattern}
+                          onChange={(e) => updateRule(index, 'pattern', e.target.value)}
+                          placeholder="例: \.pdf$"
+                          className={rule.pattern && !isValidRegex(rule.pattern) ? 'border-red-400' : ''}
+                        />
+                        {rule.pattern && !isValidRegex(rule.pattern) && (
+                          <p className="text-xs text-red-500">無効な正規表現です</p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">移動先 (UNCパス)</Label>
+                        <Input
+                          value={rule.dest_path}
+                          onChange={(e) => updateRule(index, 'dest_path', e.target.value)}
+                          placeholder="\\192.168.1.222\archive\pdf"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             <hr />
             <h3 className="text-sm font-semibold text-gray-600">Discord通知</h3>

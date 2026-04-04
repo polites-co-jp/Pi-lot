@@ -16,6 +16,8 @@ interface JobData {
   filter_mode: string;
   retention: number;
   notify: { on_start: boolean; on_error: boolean; on_success: boolean };
+  job_type: 'backup' | 'dispatch';
+  dispatch_rules: Array<{ id: number; priority: number; pattern: string; dest_path: string }>;
   last_execution: { status: string; finished_at: string | null } | null;
   created_at: string;
   updated_at: string;
@@ -77,7 +79,7 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">バックアップジョブ</h1>
+        <h1 className="text-xl font-bold">ジョブ一覧</h1>
         <Button onClick={() => navigate('/jobs/new')}>
           <Plus className="mr-1 h-4 w-4" /> 新規登録
         </Button>
@@ -99,12 +101,18 @@ export function Dashboard() {
                     <div className="flex items-center gap-2">
                       <StatusBadge status={job.last_execution?.status} />
                       <h2 className="truncate font-semibold">{job.name}</h2>
+                      {job.job_type === 'dispatch' && (
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-600">振り分け</span>
+                      )}
                       {!job.enabled && (
                         <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500">無効</span>
                       )}
                     </div>
                     <p className="mt-1 truncate text-sm text-gray-500">
-                      {job.source_path} → {job.dest_path}
+                      {job.job_type === 'dispatch'
+                        ? `${job.source_path} → (${job.dispatch_rules?.length ?? 0}ルール)`
+                        : `${job.source_path} → ${job.dest_path}`
+                      }
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
                       <span>{cronToJapanese(job.schedule)}</span>
