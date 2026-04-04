@@ -1,5 +1,4 @@
 import Fastify from 'fastify';
-import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import { resolve } from 'node:path';
@@ -22,7 +21,6 @@ async function main() {
   const app = Fastify({ logger: true });
 
   await app.register(fastifyCors, { origin: true });
-  await app.register(fastifyJwt, { secret: config.jwt.secret });
 
   await authHook(app);
   await app.register(authRoutes);
