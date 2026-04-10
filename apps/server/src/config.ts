@@ -25,6 +25,7 @@ export interface AppConfig {
   };
 }
 
+
 const CONFIG_PATH = resolve(process.cwd(), 'config', 'pilot.config.json');
 
 let cachedConfig: AppConfig | null = null;

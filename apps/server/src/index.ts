@@ -28,7 +28,7 @@ async function main() {
   await app.register(executionRoutes);
   await app.register(configRoutes);
 
-  const webDist = resolve(process.cwd(), 'packages', 'web', 'dist');
+  const webDist = resolve(process.cwd(), 'apps', 'web', 'dist');
   if (existsSync(webDist)) {
     await app.register(fastifyStatic, {
       root: webDist,

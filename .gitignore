@@ -5,4 +5,5 @@ data/
 *.db
 *.db-journal
 config/pilot.config.json
+pilot.config.json
 .env

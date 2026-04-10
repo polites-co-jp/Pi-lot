@@ -23,8 +23,8 @@ Raspberry Pi 3 (1GB RAM) で動作する LAN 内マシン管理ツール。
 - 不要な依存ライブラリを増やさない。メモリフットプリントを常に意識すること
 
 ### モノレポ構成 (npm workspaces)
-- `packages/server/` — Fastify API + バッチエンジン
-- `packages/web/` — React SPA
+- `apps/server/` — Fastify API + バッチエンジン
+- `apps/web/` — React SPA
 - ビルド済みフロントエンドは Fastify から静的配信する
 
 ## 実装ルール
@@ -32,7 +32,7 @@ Raspberry Pi 3 (1GB RAM) で動作する LAN 内マシン管理ツール。
 ### DB (SQLite)
 - `better-sqlite3` を使用する（非同期ラッパーではなく同期API）
 - DB ファイルは `data/pilot.db` に配置する
-- テーブル定義は `packages/server/src/db/` にマイグレーションとして管理する
+- テーブル定義は `apps/server/src/db/` にマイグレーションとして管理する
 - 日時は UTC の ISO 8601 文字列で格納する（SQLite に native datetime 型はない）
 
 ### バックアップ実行

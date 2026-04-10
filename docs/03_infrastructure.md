@@ -94,17 +94,17 @@ cd pi-lot
 npm ci
 
 # フロントエンドビルド
-npm run build -w packages/web
+npm run build -w apps/web
 
 # サーバービルド
-npm run build -w packages/server
+npm run build -w apps/server
 ```
 
 ### 3.3 PM2 によるプロセス管理
 
 ```bash
 # 起動
-pm2 start packages/server/dist/index.js --name pi-lot
+pm2 start apps/server/dist/index.js --name pi-lot
 
 # 自動起動設定（OS再起動時に復帰）
 pm2 startup
@@ -190,7 +190,7 @@ pm2 restart pi-lot
 
 ```bash
 cd /opt/pi-lot
-pm2 start packages/server/dist/index.js --name pi-lot
+pm2 start apps/server/dist/index.js --name pi-lot
 ```
 
 ### 6.2 停止
@@ -212,8 +212,8 @@ pm2 logs pi-lot --lines 100
 cd /opt/pi-lot
 git pull
 npm ci
-npm run build -w packages/web
-npm run build -w packages/server
+npm run build -w apps/web
+npm run build -w apps/server
 pm2 restart pi-lot
 ```
 

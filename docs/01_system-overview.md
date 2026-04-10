@@ -62,7 +62,7 @@ Pi-lot/
 ├── docs/                        # 設計書
 ├── config/
 │   └── pilot.config.json        # 管理者認証情報・Discord設定等
-├── packages/
+├── apps/
 │   ├── server/                  # Fastify APIサーバー + バッチエンジン
 │   │   ├── src/
 │   │   │   ├── api/             # APIルート定義

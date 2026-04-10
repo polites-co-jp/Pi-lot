@@ -186,13 +186,13 @@ npm ci
 ### 4.3 フロントエンドのビルド
 
 ```bash
-npm run build -w packages/web
+npm run build -w apps/web
 ```
 
 ### 4.4 サーバーのビルド
 
 ```bash
-npm run build -w packages/server
+npm run build -w apps/server
 ```
 
 ## 5. 設定ファイルの作成
@@ -270,7 +270,7 @@ mkdir -p /opt/pi-lot/data
 
 ```bash
 cd /opt/pi-lot
-pm2 start packages/server/dist/index.js --name pi-lot
+pm2 start apps/server/dist/index.js --name pi-lot
 ```
 
 ### 7.2 動作確認
@@ -377,7 +377,7 @@ sudo dphys-swapfile swapon
 cd /opt/pi-lot
 git pull
 npm ci
-npm run build -w packages/web
-npm run build -w packages/server
+npm run build -w apps/web
+npm run build -w apps/server
 pm2 restart pi-lot
 ```
