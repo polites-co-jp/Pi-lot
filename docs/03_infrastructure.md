@@ -17,8 +17,8 @@
 # 1. OSアップデート
 sudo apt update && sudo apt upgrade -y
 
-# 2. Node.js 20 LTS インストール
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# 2. Node.js 24 LTS インストール
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # 3. CIFS ユーティリティ（SMBマウント用）

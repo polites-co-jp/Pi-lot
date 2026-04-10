@@ -66,17 +66,17 @@ sudo apt install cifs-utils -y
 sudo apt install git -y
 ```
 
-### 2.4 Node.js 20 LTS
+### 2.4 Node.js 24 LTS
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
 インストール確認:
 
 ```bash
-node -v   # v20.x.x
+node -v   # v24.x.x
 npm -v    # 10.x.x
 ```
 

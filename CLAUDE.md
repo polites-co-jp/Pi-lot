@@ -7,7 +7,7 @@ Raspberry Pi 3 (1GB RAM) で動作する LAN 内マシン管理ツール。
 
 ## 技術スタック
 
-- **ランタイム**: Node.js 20 LTS（直接実行、Docker不使用）
+- **ランタイム**: Node.js 24 LTS（直接実行、Docker不使用）
 - **API**: Fastify + TypeScript
 - **フロント**: React + Vite + Tailwind CSS + shadcn/ui
 - **DB**: SQLite (better-sqlite3)

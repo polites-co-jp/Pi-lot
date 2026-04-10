@@ -100,7 +100,7 @@ Pi-lot/
 ### 3.2 ホストOS セットアップ前提
 
 - Raspberry Pi OS Lite (64-bit)
-- Node.js 20 LTS インストール済み
+- Node.js 24 LTS インストール済み
 - rsync インストール済み
 - SMB共有フォルダをマウント済み（/mnt/smb/ 配下）
 
