@@ -171,8 +171,11 @@ cd /opt/pi-lot
 
 ### 4.2 依存関係のインストール
 
+**重要: 必ず Raspberry Pi 上で `npm install` を実行すること。**
+開発マシン（Windows/Mac）で生成した `package-lock.json` をそのままコピーすると、プラットフォーム固有の依存（`@rollup/rollup-linux-arm64-gnu` 等）が含まれず、ビルド時にエラーになる。
+
 ```bash
-npm ci
+npm install
 ```
 
 ※ `better-sqlite3` のネイティブビルドが実行される。Raspberry Pi OS Lite にはビルドツール（gcc, make 等）がプリインストールされているため通常は成功する。
@@ -180,12 +183,20 @@ npm ci
 
 ```bash
 sudo apt install build-essential python3 -y
-npm ci
+npm install
 ```
 
 ### 4.3 フロントエンドのビルド
 
 ```bash
+npm run build -w apps/web
+```
+
+ビルドが `@rollup/rollup-linux-arm64-gnu` のエラーで失敗する場合は、`node_modules` と `package-lock.json` を削除して再インストールする:
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
 npm run build -w apps/web
 ```
 
@@ -200,7 +211,7 @@ npm run build -w apps/server
 ### 5.1 設定ファイルのコピー
 
 ```bash
-cd /opt/pi-lot
+cd /opt/pi-lotkou
 cp config/pilot.config.example.json config/pilot.config.json
 ```
 
@@ -376,7 +387,8 @@ sudo dphys-swapfile swapon
 ```bash
 cd /opt/pi-lot
 git pull
-npm ci
+rm -rf node_modules package-lock.json
+npm install
 npm run build -w apps/web
 npm run build -w apps/server
 pm2 restart pi-lot
