@@ -1,9 +1,13 @@
-# Step 1: 定期バックアップ機能 設計書
+# Step 1: 定期バックアップ・ファイル振り分け機能 設計書
 
 ## 1. 機能概要
 
-SMB/Samba共有フォルダ間でファイルの定期バックアップを行う。
+SMB/Samba共有フォルダ間でファイルの定期バックアップおよびファイル振り分け（ディスパッチ）を行う。
 WEB管理画面からジョブの登録・編集・実行履歴の確認ができる。
+
+ジョブは2種類のタイプを持つ:
+- **backup**: フォルダ間の定期バックアップ（rsync）
+- **dispatch**: ファイル名の正規表現パターンに基づく振り分け（コピー or 移動）
 
 ## 2. バックアップジョブ仕様
 
@@ -126,25 +130,85 @@ dest_path/
 - `総数 - retention` 個の古いフォルダを `rm -rf` で削除
 - retention = 0 の場合は削除しない（無制限保持）
 
+## 2B. ファイル振り分け（ディスパッチ）ジョブ仕様
+
+### 2B.1 ジョブ設定項目
+
+| 項目 | 型 | 説明 | 例 |
+|---|---|---|---|
+| name | string | ジョブ名 | "受信ファイル振り分け" |
+| source_path | string | 監視フォルダ（SMB共有） | `\\192.168.1.111\share\incoming` |
+| schedule | string | cron式 | `*/30 * * * *`（30分毎） |
+| enabled | boolean | 有効/無効 | true |
+| job_type | enum | `dispatch` 固定 | `dispatch` |
+| file_action | enum | `copy` / `move` | `move` |
+| default_dest_path | string? | ルール不一致ファイルの移動先（空=スキップ） | `\\192.168.1.111\share\other` |
+| dispatch_rules | array | 振り分けルール配列 | 下記参照 |
+| notify.on_start | boolean | 開始前にDiscord通知 | false |
+| notify.on_error | boolean | エラー時にDiscord通知 | true |
+| notify.on_success | boolean | 成功時にDiscord通知 | false |
+
+#### dispatch_rules の各要素
+
+| 項目 | 型 | 説明 | 例 |
+|---|---|---|---|
+| priority | number | 評価順序（小さい順） | 10 |
+| pattern | string | ファイル名マッチ用の正規表現 | `\.pdf$` |
+| dest_path | string | マッチ時の移動先パス（UNC） | `\\192.168.1.222\archive\pdf` |
+
+### 2B.2 実行フロー
+
+```
+[node-cron トリガー]
+        │
+        ▼
+  ① job_executions レコード作成 (status: "running")
+        │
+        ▼
+  ② notify.on_start == true → Discord通知
+        │
+        ▼
+  ③ source_path（SMBマウント先）のファイル一覧を取得
+        │
+        ▼
+  ④ 各ファイルに対して dispatch_rules を priority 順に評価
+     ├─ マッチ → 対応する dest_path にコピー/移動
+     ├─ いずれにもマッチせず default_dest_path あり → デフォルト先にコピー/移動
+     └─ いずれにもマッチせず default_dest_path なし → スキップ
+        │
+        ▼
+  ⑤ job_executions レコード更新
+     成功 → status: "success", files_copied, total_size 記録
+     失敗 → status: "failed", error_message 記録
+        │
+        ▼
+  ⑥ 通知判定
+     ├─ 成功 & notify.on_success → Discord通知
+     └─ 失敗 & notify.on_error  → Discord通知
+```
+
 ## 3. データモデル（SQLite）
 
 ### 3.1 backup_jobs テーブル
 
 ```sql
 CREATE TABLE backup_jobs (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  name          TEXT    NOT NULL,
-  source_path   TEXT    NOT NULL,                    -- UNCパス
-  dest_path     TEXT    NOT NULL,                    -- UNCパス
-  schedule      TEXT    NOT NULL,                    -- cron式
-  enabled       INTEGER NOT NULL DEFAULT 1,          -- 0=無効, 1=有効
-  filter_mode   TEXT    NOT NULL DEFAULT 'full',     -- 'full' | 'incremental'
-  retention     INTEGER NOT NULL DEFAULT 0,          -- 世代数 (0=無制限)
-  notify_on_start   INTEGER NOT NULL DEFAULT 0,      -- 0=OFF, 1=ON
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT    NOT NULL,
+  source_path     TEXT    NOT NULL,                    -- UNCパス
+  dest_path       TEXT    NOT NULL,                    -- UNCパス (backupジョブ用)
+  schedule        TEXT    NOT NULL,                    -- cron式
+  enabled         INTEGER NOT NULL DEFAULT 1,          -- 0=無効, 1=有効
+  filter_mode     TEXT    NOT NULL DEFAULT 'full',     -- 'full' | 'incremental'
+  retention       INTEGER NOT NULL DEFAULT 0,          -- 世代数 (0=無制限)
+  notify_on_start   INTEGER NOT NULL DEFAULT 0,        -- 0=OFF, 1=ON
   notify_on_error   INTEGER NOT NULL DEFAULT 1,
   notify_on_success INTEGER NOT NULL DEFAULT 0,
-  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-  updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+  job_type        TEXT    NOT NULL DEFAULT 'backup',   -- 'backup' | 'dispatch'
+  default_dest_path TEXT,                              -- dispatchジョブ: ルール不一致時の移動先
+  file_action     TEXT    NOT NULL DEFAULT 'copy',     -- dispatchジョブ: 'copy' | 'move'
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 ```
 
@@ -166,6 +230,21 @@ CREATE TABLE job_executions (
 CREATE INDEX idx_executions_job    ON job_executions(job_id);
 CREATE INDEX idx_executions_status ON job_executions(status);
 CREATE INDEX idx_executions_start  ON job_executions(started_at);
+```
+
+### 3.3 dispatch_rules テーブル
+
+```sql
+CREATE TABLE dispatch_rules (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id    INTEGER NOT NULL REFERENCES backup_jobs(id) ON DELETE CASCADE,
+  priority  INTEGER NOT NULL DEFAULT 0,        -- 優先度（小さい順に評価）
+  pattern   TEXT    NOT NULL,                  -- ファイル名マッチ用の正規表現
+  dest_path TEXT    NOT NULL,                  -- マッチ時の移動先パス
+  UNIQUE(job_id, priority)
+);
+
+CREATE INDEX idx_dispatch_rules_job ON dispatch_rules(job_id);
 ```
 
 ## 4. API設計
@@ -193,7 +272,7 @@ CREATE INDEX idx_executions_start  ON job_executions(started_at);
 
 ※ 以降の全APIは `Authorization: Bearer <token>` ヘッダー必須。
 
-### 4.2 バックアップジョブ
+### 4.2 ジョブ（バックアップ・ディスパッチ共通）
 
 | メソッド | パス | 説明 |
 |---|---|---|
@@ -204,7 +283,7 @@ CREATE INDEX idx_executions_start  ON job_executions(started_at);
 | DELETE | `/api/jobs/:id` | ジョブ削除 |
 | POST | `/api/jobs/:id/run` | ジョブ即時実行 |
 
-#### POST `/api/jobs` Request
+#### POST `/api/jobs` Request（バックアップジョブ）
 
 ```json
 {
@@ -215,8 +294,40 @@ CREATE INDEX idx_executions_start  ON job_executions(started_at);
   "enabled": true,
   "filter_mode": "incremental",
   "retention": 5,
+  "job_type": "backup",
   "notify": {
     "on_start": true,
+    "on_error": true,
+    "on_success": false
+  }
+}
+```
+
+#### POST `/api/jobs` Request（ディスパッチジョブ）
+
+```json
+{
+  "name": "受信ファイル振り分け",
+  "source_path": "\\\\192.168.1.111\\share\\incoming",
+  "schedule": "*/30 * * * *",
+  "enabled": true,
+  "job_type": "dispatch",
+  "file_action": "move",
+  "default_dest_path": "\\\\192.168.1.111\\share\\other",
+  "dispatch_rules": [
+    {
+      "priority": 10,
+      "pattern": "\\.pdf$",
+      "dest_path": "\\\\192.168.1.222\\archive\\pdf"
+    },
+    {
+      "priority": 20,
+      "pattern": "\\.xlsx?$",
+      "dest_path": "\\\\192.168.1.222\\archive\\excel"
+    }
+  ],
+  "notify": {
+    "on_start": false,
     "on_error": true,
     "on_success": false
   }
@@ -237,6 +348,10 @@ CREATE INDEX idx_executions_start  ON job_executions(started_at);
       "enabled": true,
       "filter_mode": "incremental",
       "retention": 5,
+      "job_type": "backup",
+      "default_dest_path": "",
+      "file_action": "copy",
+      "dispatch_rules": [],
       "notify": {
         "on_start": true,
         "on_error": true,
@@ -311,10 +426,10 @@ CREATE INDEX idx_executions_start  ON job_executions(started_at);
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Pi-lot                                    [⚙ 設定]     │
+│  Pi-lot                                 [⚙ 設定] [🚪]   │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│  バックアップジョブ                      [+ 新規登録]     │
+│  ジョブ一覧                              [+ 新規登録]     │
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
 │  │ 🟢 NAS日次バックアップ          毎日 03:00      │    │
@@ -324,36 +439,57 @@ CREATE INDEX idx_executions_start  ON job_executions(started_at);
 │  └─────────────────────────────────────────────────┘    │
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │ 🔴 開発サーバーバックアップ      毎週月 02:00    │    │
-│  │    \\192.168.1.50\dev → \\192.168.1.222\bk      │    │
-│  │    最終実行: 2026/03/24 02:10 失敗              │    │
+│  │ 🟢 受信ファイル振り分け [振り分け] 30分毎        │    │
+│  │    \\192.168.1.111\share\incoming → (3ルール)   │    │
+│  │    最終実行: 2026/03/28 12:30 成功              │    │
 │  │                         [履歴] [実行] [編集]     │    │
 │  └─────────────────────────────────────────────────┘    │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
+※ ディスパッチジョブはジョブ名の横に「振り分け」バッジが表示される。
+  パス表示は「監視フォルダ → (ルール数)」形式となる。
+
 ### 5.3 ジョブ登録/編集画面
+
+ジョブ種別（バックアップ / ファイル振り分け）をラジオボタンで切り替える。
+選択した種別に応じて表示される設定項目が変わる。
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  ← 戻る        ジョブ登録                               │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
+│  ジョブ種別      ● バックアップ  ○ ファイル振り分け       │
+│                                                         │
 │  ジョブ名        [NAS日次バックアップ              ]     │
 │                                                         │
 │  コピー元(UNC)   [\\192.168.1.111\share\data       ]     │
 │  コピー先(UNC)   [\\192.168.1.222\bk               ]     │
+│                  ※ 振り分け選択時は非表示                 │
 │                                                         │
 │  スケジュール    [0 3 * * *                        ]     │
 │                  ↳ 「毎日 03:00」  ← 自然言語プレビュー  │
 │                                                         │
-│  ─── オプション ──────────────────────────────────       │
+│  ─── バックアップオプション（バックアップ時のみ）──       │
 │                                                         │
 │  コピー方式      ○ 全ファイルコピー                      │
 │                  ● 差分コピー（前回実行以降の更新分）      │
 │                                                         │
 │  保持世代数      [5      ]  ※ 0 = 無制限                │
+│                                                         │
+│  ─── 振り分け設定（振り分け時のみ）─────────────         │
+│                                                         │
+│  ファイル操作    ○ コピー  ● 移動                        │
+│  条件不一致時の移動先 [空欄=移動しない            ]       │
+│                                                         │
+│  振り分けルール (上から順に評価)       [+ ルール追加]     │
+│  ┌───────────────────────────────────────────┐          │
+│  │ ルール1                             [🗑]  │          │
+│  │ ファイル名の正規表現 [\.pdf$           ]   │          │
+│  │ 移動先(UNC)        [\\192...\pdf      ]   │          │
+│  └───────────────────────────────────────────┘          │
 │                                                         │
 │  ─── Discord通知 ────────────────────────────────       │
 │                                                         │
@@ -361,9 +497,9 @@ CREATE INDEX idx_executions_start  ON job_executions(started_at);
 │  ☑ エラー時に通知                                       │
 │  ☐ 成功時に通知                                         │
 │                                                         │
-│  有効            [ON/OFF トグル]                         │
+│  ☑ 有効                                                 │
 │                                                         │
-│                             [キャンセル]  [保存]         │
+│                 [キャンセル]  [保存]      [削除]          │
 └─────────────────────────────────────────────────────────┘
 ```
 

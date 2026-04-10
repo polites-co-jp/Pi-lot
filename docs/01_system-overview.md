@@ -48,7 +48,7 @@ Pi-lot は Raspberry Pi を活用した LAN 内マシン管理の総合パッケ
 | フロントエンド | React + Vite | SPA構成 |
 | UIフレームワーク | Tailwind CSS + shadcn/ui | レスポンシブ対応 |
 | APIサーバー | Fastify | 軽量・高速 |
-| 認証 | JWT (@fastify/jwt) | 管理者1名固定 |
+| 認証 | JWT (jsonwebtoken) | 管理者1名固定 |
 | スケジューラ | node-cron | cron式でジョブ実行 |
 | DB | SQLite (better-sqlite3) | 組み込み・軽量・Pi 3向き |
 | 通知 | Discord Webhook | fetch による直接呼び出し |
@@ -108,7 +108,7 @@ Pi-lot/
 
 | Step | 内容 | 状態 |
 |---|---|---|
-| Step 1 | 定期バックアップ登録 + 結果確認WEB画面 | **← 今ここ** |
+| Step 1 | 定期バックアップ・ファイル振り分け登録 + 結果確認WEB画面 | **← 今ここ** |
 | Step 2 | LAN/WAN マシン死活監視 + ダッシュボード | 未着手 |
 | Step 3 | リモートコマンド実行 | 未着手 |
 | Step 4 | その他拡張機能 | 未着手 |

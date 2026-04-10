@@ -45,7 +45,7 @@ Raspberry Pi 3 (1GB RAM) で動作する LAN 内マシン管理ツール。
 ### 認証
 - 管理者は 1 人のみ。Users テーブルは作らない
 - 認証情報は `config/pilot.config.json` で定義する
-- JWT (@fastify/jwt) でセッション管理する
+- JWT (jsonwebtoken) でセッション管理する
 
 ### Discord 通知
 - ジョブごとに `notify_on_start` / `notify_on_error` / `notify_on_success` を個別設定できる
@@ -76,7 +76,7 @@ Raspberry Pi 3 (1GB RAM) で動作する LAN 内マシン管理ツール。
 
 詳細な仕様は `docs/` を参照:
 - `docs/01_system-overview.md` — 全体設計
-- `docs/02_step1-backup-design.md` — Step1 バックアップ機能の詳細（API・DB・画面）
+- `docs/02_step1-backup-design.md` — Step1 バックアップ・ファイル振り分け機能の詳細（API・DB・画面）
 - `docs/03_infrastructure.md` — インフラ・環境構成
 
 
